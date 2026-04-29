@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/satellite/*.tif
+data/satellite/*.nc
+!data/satellite/.gitkeep
+data/ground_truth/photos/*
+!data/ground_truth/photos/.gitkeep
+
+# Models (exclude old models, but keep production models)
+models/*.h5
+models/*.joblib
+models/*_savedmodel/
+!models/*.keras
+!models/*.pkl
+!models/*.json
+!models/*.png
+!models/.gitkeep
+
+# Weights & Biases
+wandb/
+
+# Kaggle
+.kaggle/
+
+# Logs
+logs/*.log
+!logs/.gitkeep
+
+# Azure
+.azure/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large files
+*.zip
+*.tar.gz
+*.rar
+
+# Temporary
+tmp/
+temp/
+*.tmp

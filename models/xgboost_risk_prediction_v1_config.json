@@ -1,0 +1,26 @@
+{
+  "weather_data_path": "/kaggle/input/datasets/yesayasentosa/datathon-prediksi-produksi-padi/weather_data.csv",
+  "production_data_path": "/kaggle/input/datasets/yesayasentosa/datathon-prediksi-produksi-padi/dataset_produksi_padi_karawang_cleaned.csv",
+  "output_dir": "/kaggle/working/models",
+  "logs_dir": "/kaggle/working/logs",
+  "model_name": "xgboost_risk_prediction_v1",
+  "risk_threshold_humidity": 85,
+  "risk_threshold_temp_min": 25,
+  "risk_threshold_temp_max": 32,
+  "risk_rainfall_threshold": 5,
+  "risk_categories": [
+    "Low",
+    "Medium",
+    "High"
+  ],
+  "test_size": 0.2,
+  "random_state": 42,
+  "n_estimators": 300,
+  "max_depth": 6,
+  "learning_rate": 0.1,
+  "n_jobs": -1,
+  "gpu_enabled": true,
+  "predictor": "auto",
+  "kaggle_gpu_enabled": true,
+  "kaggle_n_estimators": 300
+}
