@@ -41,12 +41,12 @@ Indonesia menghadapi kehilangan hasil panen **20-40%** akibat serangan hama dan 
 | Metrik | Nilai |
 |--------|-------|
 | Model | XGBoost (Gradient Boosting) |
-| Accuracy | **98.37%** |
-| Precision | **98.37%** |
-| Recall | **98.37%** |
-| F1-Score | **98.37%** |
+| Accuracy | **98.22%** |
+| Precision | **98.23%** |
+| Recall | **98.22%** |
+| F1-Score | **98.22%** |
 
-**Features:** 37 fitur cuaca (kelembapan, suhu, curah hujan, dll)
+**Features:** 41 fitur cuaca, temporal, indikator penyakit, dan indeks vegetasi
 
 ## 📊 Kelas Penyakit yang Dideteksi
 

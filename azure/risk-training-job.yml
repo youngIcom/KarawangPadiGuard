@@ -1,0 +1,12 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+display_name: karawangpadiguard-risk-xgboost
+experiment_name: karawang-padi-guard-risk
+description: Train the multimodal XGBoost risk model with weather and vegetation-index features.
+code: ..
+command: >-
+  python src/models/train_risk_model.py
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+  conda_file: conda-risk.yml
+compute: azureml:cpu-cluster

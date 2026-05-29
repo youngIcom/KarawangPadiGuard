@@ -1,0 +1,29 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+type: command
+display_name: karawangpadiguard-risk-xgboost
+experiment_name: karawang-padi-guard-risk
+description: Train the multimodal XGBoost risk model with weather and vegetation-index features.
+code: .
+command: >-
+  bash -lc 'set -e;
+  echo "PWD=$(pwd)";
+  TRAIN_SCRIPT=$(find /mnt/azureml -path "*/src/models/train_risk_model.py" -type f | head -n 1);
+  if [ -z "$TRAIN_SCRIPT" ]; then
+    echo "ERROR: src/models/train_risk_model.py not found in Azure ML snapshot";
+    echo "Current directory files:";
+    find . -maxdepth 4 -type f | sort | head -250;
+    echo "AzureML files:";
+    find /mnt/azureml -maxdepth 6 -type f | sort | head -250;
+    exit 2;
+  fi;
+  PROJECT_ROOT=$(dirname "$(dirname "$(dirname "$TRAIN_SCRIPT")")");
+  echo "TRAIN_SCRIPT=$TRAIN_SCRIPT";
+  echo "PROJECT_ROOT=$PROJECT_ROOT";
+  cd "$PROJECT_ROOT";
+  ls -la;
+  ls -lh data/processed || true;
+  python src/models/train_risk_model.py'
+environment:
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+  conda_file: azure/conda-risk.yml
+compute: azureml:cpu-cluster

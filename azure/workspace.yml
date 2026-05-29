@@ -1,0 +1,5 @@
+$schema: https://azuremlschemas.azureedge.net/latest/workspace.schema.json
+name: karawangpadiguard-ml
+display_name: KarawangPadiGuard ML Workspace
+description: Azure ML workspace for KarawangPadiGuard experiment tracking, model artifacts, and future MLOps pipelines.
+location: southeastasia

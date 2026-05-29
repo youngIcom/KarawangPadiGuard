@@ -1,0 +1,68 @@
+# Azure ML code snapshot ignore file.
+# Keep source code and small processed tabular datasets needed by risk training.
+
+# Git/local metadata
+/.git/
+/.azure/
+
+# Python/cache
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Local environments
+/.env
+/.venv/
+/venv/
+/env/
+/ENV/
+
+# IDE/OS
+/.vscode/
+/.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Large or unnecessary top-level assets.
+# Use leading slash so this does NOT exclude src/models/.
+/data/raw/
+/data/preprocess/
+/data/satellite/
+/data/ground_truth/
+/models/
+/logs/
+/mlruns/
+/outputs/
+/artifacts/
+/wandb/
+/.kaggle/
+/OUTPUT_EDA/
+/notebooks/
+/reports/
+/Dokumentasi tahap 2/
+
+# Large docs/media not needed for Azure ML training
+*.pdf
+*.zip
+*.tar.gz
+*.rar
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Explicitly keep training source and processed datasets.
+!/src/
+!/src/models/
+!/src/models/train_risk_model.py
+!/data/
+!/data/processed/
+!/data/processed/weather_data.csv
+!/data/processed/satellite_data.csv
+!/data/processed/dataset_produksi_padi_karawang_cleaned.csv
+!/azure/
+!/azure/conda-risk.yml

@@ -87,3 +87,58 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+
+# Project submission hygiene
+# Keep only README.md as markdown documentation in GitHub.
+*.md
+!README.md
+
+# Do not push PDF deliverables/templates.
+*.pdf
+Dokumentasi tahap 2/
+
+# Local experiment/output artifacts
+OUTPUT_EDA/
+mlruns/
+**/mlruns/
+azureml-logs/
+user_logs/
+outputs/
+artifacts/
+reports/
+
+# Model output artifacts. Keep lightweight config/features JSON if already tracked.
+models/*.png
+models/*.csv
+models/*_metrics.json
+models/*.h5
+models/*.pkl
+models/*.joblib
+models/*.keras
+models/*_savedmodel/
+
+# Streamlit/local caches
+.streamlit/secrets.toml
+.cache/
+
+# Cloud credentials and secret-like files
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+*secret*
+*credential*
+*token*
+kaggle.json
+.env*
+!.env.example
+
+# Temporary/debug job specs not required for source submission
+debug-azure-files-job.yml
+fix_notebook.py
+# Report/deliverable drafts outside source code
+PROJECT_BRIEF*.txt
+Project_Brief*.txt
+PRESENTATION_CONTENT.txt
+

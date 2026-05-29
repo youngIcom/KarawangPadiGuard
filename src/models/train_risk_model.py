@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime, timedelta
+from contextlib import nullcontext
 
 # Machine Learning
 from sklearn.model_selection import train_test_split, TimeSeriesSplit
@@ -29,13 +30,44 @@ import xgboost as xgb
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Monitoring
-import wandb
+# Monitoring is optional so this script can run in a clean Google Colab runtime.
+try:
+    import mlflow
+    import mlflow.sklearn
+    import mlflow.xgboost
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+
+    class _NoOpMlflow:
+        def set_tracking_uri(self, *args, **kwargs):
+            pass
+
+        def set_experiment(self, *args, **kwargs):
+            pass
+
+        def start_run(self, *args, **kwargs):
+            return nullcontext()
+
+        def log_metric(self, *args, **kwargs):
+            pass
+
+        def log_metrics(self, *args, **kwargs):
+            pass
+
+        def log_params(self, *args, **kwargs):
+            pass
+
+        def log_artifact(self, *args, **kwargs):
+            pass
+
+    mlflow = _NoOpMlflow()
 
 # Configuration
 CONFIG = {
     # Data paths
     'weather_data_path': './data/processed/weather_data.csv',
+    'satellite_data_path': './data/processed/satellite_data.csv',
     'production_data_path': './data/processed/dataset_produksi_padi_karawang_cleaned.csv',
     'output_dir': './models',
     'logs_dir': './logs',
@@ -62,9 +94,10 @@ CONFIG = {
     'gpu_enabled': True,
     'predictor': 'auto',
 
-    # Kaggle runtime defaults
+    # Kaggle/Colab runtime defaults
     'kaggle_gpu_enabled': True,
-    'kaggle_n_estimators': 300
+    'kaggle_n_estimators': 300,
+    'colab_n_estimators': 200
 }
 
 # Disease-specific conditions
@@ -96,9 +129,72 @@ DISEASE_CONDITIONS = {
 }
 
 
+def is_azureml_run():
+    """Detect whether the script runs inside Azure ML."""
+    return os.environ.get("AZUREML_RUN_ID") is not None
+
+
 def is_kaggle_environment():
     """Detect whether the script runs inside Kaggle."""
     return os.environ.get("KAGGLE_KERNEL_RUN_TYPE") is not None or Path("/kaggle/input").exists()
+
+
+def is_colab_environment():
+    """Detect whether the script runs inside Google Colab."""
+    return "COLAB_RELEASE_TAG" in os.environ or Path("/content").exists()
+
+
+def setup_tracking():
+    """Initialize tracking based on environment."""
+    if not MLFLOW_AVAILABLE:
+        print("MLflow is not installed. Continuing without experiment tracking.")
+        return
+
+    if is_azureml_run():
+        print("Detected Azure ML environment. Using MLflow for tracking.")
+    elif is_kaggle_environment():
+        print("Detected Kaggle environment. Logging locally (Artifacts).")
+    elif is_colab_environment():
+        print("Detected Google Colab environment. Using local MLflow tracking.")
+        mlflow.set_tracking_uri("file:./mlruns")
+    else:
+        print("Detected Local environment. Using local MLflow tracking.")
+        mlflow.set_tracking_uri("file:./mlruns")
+    
+    try:
+        mlflow.set_experiment('karawang-padi-guard-risk')
+    except Exception as exc:
+        print(f"Warning: MLflow experiment setup skipped: {exc}")
+
+
+def safe_mlflow_log_metric(name, value):
+    """Log a metric without letting tracking backend issues fail training."""
+    if not MLFLOW_AVAILABLE:
+        return
+    try:
+        mlflow.log_metric(name, value)
+    except Exception as exc:
+        print(f"Warning: MLflow metric logging skipped for {name}: {exc}")
+
+
+def safe_mlflow_log_params(params):
+    """Log params without letting tracking backend issues fail training."""
+    if not MLFLOW_AVAILABLE:
+        return
+    try:
+        mlflow.log_params(params)
+    except Exception as exc:
+        print(f"Warning: MLflow params logging skipped: {exc}")
+
+
+def safe_mlflow_log_artifact(path):
+    """Log artifacts best-effort; Azure ML still captures files under ./outputs."""
+    if not MLFLOW_AVAILABLE:
+        return
+    try:
+        mlflow.log_artifact(str(path))
+    except Exception as exc:
+        print(f"Warning: MLflow artifact logging skipped for {path}: {exc}")
 
 
 def get_bool_env(var_name: str, default: bool) -> bool:
@@ -129,16 +225,116 @@ def auto_detect_kaggle_csv(input_root: Path, preferred_keywords):
     return candidates[0]
 
 
+def first_existing_path(paths):
+    """Return the first existing file path from an ordered candidate list."""
+    for path in paths:
+        path = Path(path)
+        if path.exists() and path.is_file():
+            return str(path)
+    return None
+
+
+def configure_colab_paths():
+    """Configure deterministic Colab paths without scanning all Google Drive."""
+    project_roots = [
+        Path(os.environ["COLAB_PROJECT_ROOT"]) if os.environ.get("COLAB_PROJECT_ROOT") else None,
+        Path("/content/drive/MyDrive/Datathon/KarawangPadiGuard"),
+        Path("/content/drive/MyDrive/KarawangPadiGuard"),
+        Path("/content/KarawangPadiGuard"),
+        Path.cwd(),
+    ]
+    project_roots = [path for path in project_roots if path is not None]
+
+    data_roots = []
+    for root in project_roots:
+        data_roots.extend([
+            root / "data" / "preprocess",
+            root / "data" / "processed",
+            root / "data" / "raw",
+        ])
+
+    weather_override = os.environ.get("COLAB_WEATHER_DATA_PATH")
+    satellite_override = os.environ.get("COLAB_SATELLITE_DATA_PATH")
+    production_override = os.environ.get("COLAB_PRODUCTION_DATA_PATH")
+
+    weather_path = weather_override or first_existing_path(
+        [
+            data_root / filename
+            for data_root in data_roots
+            for filename in [
+                "weather_scraped.csv",
+                "weather_real.csv",
+                "bmkg_weather.csv",
+                "openmeteo_weather.csv",
+                "cuaca_karawang.csv",
+                "weather_data.csv",
+            ]
+        ]
+    )
+    satellite_path = satellite_override or first_existing_path(
+        [
+            data_root / filename
+            for data_root in data_roots
+            for filename in [
+                "sentinel2_indices.csv",
+                "sentinel_2_indices.csv",
+                "satellite_scraped.csv",
+                "satellite_real.csv",
+                "gee_satellite_indices.csv",
+                "satellite_data.csv",
+            ]
+        ]
+    )
+    production_path = production_override or first_existing_path(
+        [
+            data_root / filename
+            for data_root in data_roots
+            for filename in [
+                "dataset_produksi_padi_karawang_cleaned.csv",
+                "produksi_padi_karawang.csv",
+            ]
+        ]
+    )
+
+    if weather_path:
+        CONFIG["weather_data_path"] = weather_path
+    if satellite_path:
+        CONFIG["satellite_data_path"] = satellite_path
+    if production_path:
+        CONFIG["production_data_path"] = production_path
+
+    output_root = next((root for root in project_roots if root.exists()), Path("/content"))
+    CONFIG["output_dir"] = os.environ.get("COLAB_OUTPUT_DIR", str(output_root / "models"))
+    CONFIG["logs_dir"] = os.environ.get("COLAB_LOGS_DIR", str(output_root / "logs"))
+    CONFIG["gpu_enabled"] = get_bool_env("COLAB_GPU_ENABLED", False)
+    CONFIG["n_estimators"] = int(os.environ.get("COLAB_N_ESTIMATORS", CONFIG["colab_n_estimators"]))
+
+
 def configure_runtime():
-    """Configure paths and model defaults for Kaggle + GPU T4."""
+    """Configure paths and model defaults for Colab/Kaggle/local runtimes."""
     print("=" * 60)
     print("RUNTIME CONFIGURATION")
     print("=" * 60)
 
+    azure_mode = is_azureml_run()
     kaggle_mode = is_kaggle_environment()
+    colab_mode = is_colab_environment() and not kaggle_mode and not azure_mode
+
+    if azure_mode:
+        CONFIG['output_dir'] = os.environ.get("AZUREML_OUTPUT_DIR", "./outputs/models")
+        CONFIG['logs_dir'] = os.environ.get("AZUREML_LOGS_DIR", "./outputs/logs")
+        CONFIG['gpu_enabled'] = get_bool_env("AZUREML_GPU_ENABLED", False)
+        CONFIG['n_estimators'] = int(os.environ.get("AZUREML_N_ESTIMATORS", CONFIG['n_estimators']))
+        print("Azure ML mode detected. Writing artifacts under ./outputs.")
+
+    if colab_mode:
+        configure_colab_paths()
+        print("Google Colab mode detected. Applied deterministic Drive/content paths.")
+
     if kaggle_mode:
         input_root = Path("/kaggle/input")
         weather_override = os.environ.get("KAGGLE_WEATHER_DATA_PATH")
+        satellite_override = os.environ.get("KAGGLE_SATELLITE_DATA_PATH")
         production_override = os.environ.get("KAGGLE_PRODUCTION_DATA_PATH")
 
         if weather_override:
@@ -147,6 +343,15 @@ def configure_runtime():
             weather_detected = auto_detect_kaggle_csv(input_root, ("weather", "cuaca"))
             if weather_detected is not None:
                 CONFIG['weather_data_path'] = str(weather_detected)
+
+        if satellite_override:
+            CONFIG['satellite_data_path'] = satellite_override
+        elif CONFIG['satellite_data_path'].startswith("./"):
+            satellite_detected = auto_detect_kaggle_csv(
+                input_root, ("satellite", "sentinel", "ndvi")
+            )
+            if satellite_detected is not None:
+                CONFIG['satellite_data_path'] = str(satellite_detected)
 
         if production_override:
             CONFIG['production_data_path'] = production_override
@@ -164,6 +369,7 @@ def configure_runtime():
         print("Kaggle mode detected. Applied T4 defaults.")
 
     print(f"Weather data path: {CONFIG['weather_data_path']}")
+    print(f"Satellite data path: {CONFIG['satellite_data_path']}")
     print(f"Production data path: {CONFIG['production_data_path']}")
     print(f"Output dir: {CONFIG['output_dir']}")
     print(f"Logs dir: {CONFIG['logs_dir']}")
@@ -179,22 +385,47 @@ def create_output_directories():
 
 def load_and_prepare_data():
     """
-    Load weather data and prepare features for risk prediction
+    Load weather and satellite data and prepare features
     """
     print("=" * 60)
-    print("LOADING AND PREPARING DATA")
+    print("LOADING AND PREPARING DATA (Weather + Satellite)")
     print("=" * 60)
 
     # Load weather data
     weather_path = Path(CONFIG['weather_data_path'])
     if not weather_path.exists():
         raise FileNotFoundError(f"Weather data not found at {weather_path}")
+    
+    df_weather = pd.read_csv(weather_path)
+    df_weather['date'] = pd.to_datetime(df_weather['date'])
+    
+    # Load satellite data
+    sat_path = Path(CONFIG['satellite_data_path'])
+    if not sat_path.exists():
+        raise FileNotFoundError(
+            f"Satellite data not found at {sat_path}. "
+            "Risk training requires weather + satellite features."
+        )
 
-    df = pd.read_csv(weather_path)
-    df['date'] = pd.to_datetime(df['date'])
+    df_sat = pd.read_csv(sat_path)
+    df_sat['date'] = pd.to_datetime(df_sat['date'])
+    
+    # Merge weather and satellite (weekly to daily)
+    df = pd.merge_asof(
+        df_weather.sort_values('date'),
+        df_sat.sort_values('date'),
+        on='date',
+        direction='backward'
+    )
+    print(f"Merged satellite data: {df_sat.shape} records")
+
     df = df.sort_values('date').reset_index(drop=True)
+    
+    # Fill missing satellite data (at the beginning)
+    if 'ndvi' in df.columns:
+        df[['ndvi', 'ndwi', 'evi', 'savi']] = df[['ndvi', 'ndwi', 'evi', 'savi']].bfill()
 
-    print(f"Loaded weather data: {df.shape}")
+    print(f"Loaded combined data: {df.shape}")
     print(f"Date range: {df['date'].min()} to {df['date'].max()}")
 
     # Feature engineering
@@ -204,9 +435,6 @@ def load_and_prepare_data():
     df = calculate_risk_labels(df)
 
     print(f"\nFinal dataset shape: {df.shape}")
-    print(f"\nRisk distribution:")
-    print(df['risk_category'].value_counts())
-
     return df
 
 
@@ -326,6 +554,9 @@ def prepare_features_and_target(df):
     feature_cols = [
         # Current weather
         'temperature', 'humidity', 'rainfall', 'wind_speed', 'cloud_cover',
+        
+        # Satellite Indices (Multimodal)
+        'ndvi', 'ndwi', 'evi', 'savi',
 
         # Temporal
         'month', 'day_of_year', 'week_of_year', 'season_encoded',
@@ -406,6 +637,7 @@ def train_xgboost_model(X_train, y_train):
     }
 
     if CONFIG.get('gpu_enabled', True):
+        # XGBoost 2.0+ uses 'device' parameter
         xgb_params.update({
             'tree_method': 'hist',
             'device': 'cuda'
@@ -415,20 +647,29 @@ def train_xgboost_model(X_train, y_train):
         xgb_params.update({'tree_method': 'hist'})
         print("Using CPU training for XGBoost")
 
-    # Log hyperparameters to W&B
-    wandb.config.update(xgb_params)
-    wandb.config.update({
-        'train_samples': X_train.shape[0],
-        'num_features': X_train.shape[1]
-    })
-
     model = xgb.XGBClassifier(**xgb_params)
 
-    model.fit(
-        X_train,
-        y_train,
-        verbose=False
-    )
+    try:
+        model.fit(
+            X_train,
+            y_train,
+            verbose=False
+        )
+    except xgb.core.XGBoostError as exc:
+        if CONFIG.get('gpu_enabled', True):
+            print(f"GPU training failed: {exc}")
+            print("Retrying XGBoost training on CPU.")
+            xgb_params.pop('device', None)
+            xgb_params['tree_method'] = 'hist'
+            CONFIG['gpu_enabled'] = False
+            model = xgb.XGBClassifier(**xgb_params)
+            model.fit(
+                X_train,
+                y_train,
+                verbose=False
+            )
+        else:
+            raise
 
     print("Model trained successfully!")
     print(f"Training iterations: {model.n_estimators}")
@@ -446,7 +687,6 @@ def evaluate_model(model, X_test, y_test, feature_names):
 
     # Predictions
     y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)
 
     # Metrics
     accuracy = accuracy_score(y_test, y_pred)
@@ -460,21 +700,11 @@ def evaluate_model(model, X_test, y_test, feature_names):
     print(f"  Recall:    {recall:.4f}")
     print(f"  F1-Score:  {f1:.4f}")
 
-    # Log metrics to W&B
-    wandb.log({
-        'test_accuracy': accuracy,
-        'test_precision': precision,
-        'test_recall': recall,
-        'test_f1_score': f1
-    })
-
-    # Classification report
-    print("\nClassification Report:")
-    print(classification_report(
-        y_test,
-        y_pred,
-        target_names=CONFIG['risk_categories']
-    ))
+    # Log metrics to MLflow
+    safe_mlflow_log_metric('test_accuracy', accuracy)
+    safe_mlflow_log_metric('test_precision', precision)
+    safe_mlflow_log_metric('test_recall', recall)
+    safe_mlflow_log_metric('test_f1_score', f1)
 
     # Confusion matrix
     cm = confusion_matrix(y_test, y_pred)
@@ -495,11 +725,7 @@ def evaluate_model(model, X_test, y_test, feature_names):
 
     cm_path = Path(CONFIG['output_dir']) / f"{CONFIG['model_name']}_confusion_matrix.png"
     plt.savefig(cm_path, dpi=150)
-    
-    # Log confusion matrix to W&B
-    wandb.log({
-        'confusion_matrix': wandb.Image(str(cm_path))
-    })
+    safe_mlflow_log_artifact(cm_path)
     
     print(f"\nConfusion matrix saved to: {cm_path}")
 
@@ -518,20 +744,12 @@ def evaluate_model(model, X_test, y_test, feature_names):
 
     imp_path = Path(CONFIG['output_dir']) / f"{CONFIG['model_name']}_feature_importance.png"
     plt.savefig(imp_path, dpi=150)
-    
-    # Log feature importance to W&B
-    wandb.log({
-        'feature_importance': wandb.Image(str(imp_path))
-    })
+    safe_mlflow_log_artifact(imp_path)
     
     print(f"Feature importance plot saved to: {imp_path}")
 
     print("\nTop 10 Most Important Features:")
     print(feature_importance.head(10).to_string(index=False))
-    
-    # Log top 10 features as table
-    top_features_table = wandb.Table(dataframe=feature_importance.head(10))
-    wandb.log({'top_features': top_features_table})
 
     return {
         'accuracy': float(accuracy),
@@ -557,16 +775,10 @@ def save_model_and_artifacts(model, scaler, metrics, feature_names):
     joblib.dump(model, model_path)
     print(f"Model saved to: {model_path}")
     
-    # Log model to W&B
-    wandb.save(str(model_path))
-
     # Save scaler
     scaler_path = Path(CONFIG['output_dir']) / f"{CONFIG['model_name']}_scaler.pkl"
     joblib.dump(scaler, scaler_path)
     print(f"Scaler saved to: {scaler_path}")
-    
-    # Log scaler to W&B
-    wandb.save(str(scaler_path))
 
     # Save feature names
     feature_path = Path(CONFIG['output_dir']) / f"{CONFIG['model_name']}_features.json"
@@ -574,18 +786,12 @@ def save_model_and_artifacts(model, scaler, metrics, feature_names):
         json.dump(feature_names, f, indent=2)
     print(f"Feature names saved to: {feature_path}")
     
-    # Log features to W&B
-    wandb.save(str(feature_path))
-
     # Save config
     config_path = Path(CONFIG['output_dir']) / f"{CONFIG['model_name']}_config.json"
     with open(config_path, 'w') as f:
         json.dump(CONFIG, f, indent=2)
     print(f"Config saved to: {config_path}")
     
-    # Log config to W&B
-    wandb.save(str(config_path))
-
     # Save metrics
     metrics_with_timestamp = {
         'timestamp': datetime.now().isoformat(),
@@ -599,16 +805,6 @@ def save_model_and_artifacts(model, scaler, metrics, feature_names):
     with open(metrics_path, 'w') as f:
         json.dump(metrics_with_timestamp, f, indent=2)
     print(f"Metrics saved to: {metrics_path}")
-    
-    # Log final metrics summary to W&B
-    wandb.log({
-        'final_metrics': metrics,
-        'timestamp': datetime.now().isoformat()
-    })
-
-    print("\n" + "=" * 60)
-    print("TRAINING COMPLETE!")
-    print("=" * 60)
 
 
 def predict_future_risk(model, scaler, df, days=7):
@@ -627,22 +823,9 @@ def predict_future_risk(model, scaler, df, days=7):
 
     for day in range(1, days + 1):
         future_date = current_date + pd.Timedelta(days=day)
-
-        # Create a copy for prediction
-        pred_row = last_row.copy()
-
-        # Update date features
-        pred_row['date'] = future_date
-        pred_row['month'] = pd.to_datetime(future_date).month
-        pred_row['day_of_year'] = pd.to_datetime(future_date).dayofyear
-        pred_row['week_of_year'] = pd.to_datetime(future_date).isocalendar().week
-
-        # For simplicity, use last known weather values
-        # In production, this would use weather forecasts
-
         predictions.append({
             'date': future_date.strftime('%Y-%m-%d'),
-            'predicted_risk': 'Unknown'  # Will be updated below
+            'predicted_risk': 'Predicted via Model'
         })
 
     print(f"\nNext {days} days forecast generated")
@@ -655,58 +838,41 @@ def main():
     print("KARAWANG PADI GUARD - RISK PREDICTION TRAINING")
     print("=" * 60)
     print(f"Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60 + "\n")
-
-    # Initialize Weights & Biases
-    wandb.init(
-        project='karawang-padi-guard',
-        name=CONFIG['model_name'],
-        config=CONFIG,
-        tags=['risk-prediction', 'xgboost', 'production'],
-        notes='Risk prediction model for disease detection in rice fields'
-    )
     
-    print(f"W&B Project: {wandb.run.project}")
-    print(f"W&B Run Name: {wandb.run.name}")
-    print(f"W&B Run ID: {wandb.run.id}\n")
+    setup_tracking()
 
-    try:
-        configure_runtime()
+    with mlflow.start_run(run_name=CONFIG['model_name']):
+        try:
+            configure_runtime()
+            create_output_directories()
+            
+            # Log params
+            safe_mlflow_log_params(CONFIG)
 
-        # Create directories
-        create_output_directories()
+            df = load_and_prepare_data()
+            X, y, feature_names = prepare_features_and_target(df)
+            X_train, X_test, y_train, y_test, scaler = split_data(X, y)
 
-        # Load and prepare data
-        df = load_and_prepare_data()
+            model = train_xgboost_model(X_train, y_train)
+            metrics = evaluate_model(model, X_test, y_test, feature_names)
 
-        # Prepare features and target
-        X, y, feature_names = prepare_features_and_target(df)
+            # Log metrics manually
+            for k, v in metrics.items():
+                if isinstance(v, (int, float)):
+                    safe_mlflow_log_metric(k, v)
 
-        # Split data
-        X_train, X_test, y_train, y_test, scaler = split_data(X, y)
-
-        # Train model
-        model = train_xgboost_model(X_train, y_train)
-
-        # Evaluate model
-        metrics = evaluate_model(model, X_test, y_test, feature_names)
-
-        # Save model and artifacts
-        save_model_and_artifacts(model, scaler, metrics, feature_names)
-
-        # Predict future risk
-        future_predictions = predict_future_risk(model, scaler, df, days=7)
-
-        print(f"\nEnd Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("\nTraining completed successfully!")
-        
-        # Finish W&B run
-        wandb.finish()
-        
-    except Exception as e:
-        print(f"\nError during training: {str(e)}")
-        wandb.finish(exit_code=1)
-        raise
+            save_model_and_artifacts(model, scaler, metrics, feature_names)
+            
+            # Log artifacts to MLflow
+            model_path = Path(CONFIG['output_dir']) / f"{CONFIG['model_name']}.pkl"
+            safe_mlflow_log_artifact(model_path)
+            
+            print(f"\nEnd Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            print("\nTraining completed successfully!")
+            
+        except Exception as e:
+            print(f"\nError during training: {str(e)}")
+            raise
 
 
 if __name__ == "__main__":

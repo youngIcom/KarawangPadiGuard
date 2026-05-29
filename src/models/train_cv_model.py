@@ -31,7 +31,29 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Monitoring
-import wandb
+import mlflow
+import mlflow.keras
+
+# ... (inside is_azureml_run, is_kaggle_environment, setup_tracking)
+def is_azureml_run():
+    """Detect whether the script runs inside Azure ML."""
+    return os.environ.get("AZUREML_RUN_ID") is not None
+
+def is_kaggle_environment():
+    """Detect whether the script runs inside Kaggle."""
+    return os.environ.get("KAGGLE_KERNEL_RUN_TYPE") is not None or Path("/kaggle/input").exists()
+
+def setup_tracking():
+    """Initialize tracking based on environment."""
+    if is_azureml_run():
+        print("Detected Azure ML environment. Using MLflow for tracking.")
+    elif is_kaggle_environment():
+        print("Detected Kaggle environment. Logging locally.")
+    else:
+        print("Detected Local environment. Using local MLflow tracking.")
+        mlflow.set_tracking_uri("file:./mlruns")
+    
+    mlflow.set_experiment('karawang-padi-guard-cv')
 
 # Configuration
 CONFIG = {

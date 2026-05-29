@@ -148,7 +148,7 @@ RISK_COLORS = {'Low': '#2ecc71', 'Medium': '#f39c12', 'High': '#e74c3c'}
 RISK_ADVICE = {
     'Low': '🟢 Risiko Rendah - Lanjutkan pemantauan rutin',
     'Medium': '🟡 Risiko Sedang - Tingkatkan pengamatan, siapkan tindakan pencegahan',
-    'High': '🔴 Risiko TingGI - Segera ambil tindakan preventif, perhatikan kondisi cuaca'
+    'High': '🔴 Risiko Tinggi - Segera ambil tindakan preventif, perhatikan kondisi cuaca'
 }
 
 
@@ -220,6 +220,39 @@ def load_risk_model():
         return None, None, None, None
 
 
+@st.cache_data
+def load_latest_satellite_features():
+    """Load the latest vegetation-index row used by the multimodal risk model."""
+    satellite_path = Path('data/processed/satellite_data.csv')
+    default_features = {
+        'ndvi': 0.6,
+        'ndwi': 0.0,
+        'evi': 0.65,
+        'savi': 0.57,
+        'satellite_date': None,
+    }
+
+    if not satellite_path.exists():
+        return default_features
+
+    try:
+        satellite_df = pd.read_csv(satellite_path)
+        if satellite_df.empty:
+            return default_features
+
+        satellite_df['date'] = pd.to_datetime(satellite_df['date'])
+        latest = satellite_df.sort_values('date').iloc[-1]
+        return {
+            'ndvi': float(latest.get('ndvi', default_features['ndvi'])),
+            'ndwi': float(latest.get('ndwi', default_features['ndwi'])),
+            'evi': float(latest.get('evi', default_features['evi'])),
+            'savi': float(latest.get('savi', default_features['savi'])),
+            'satellite_date': latest['date'].strftime('%Y-%m-%d'),
+        }
+    except Exception:
+        return default_features
+
+
 # ==================== IMAGE PROCESSING ====================
 
 def preprocess_image(image, target_size=(224, 224)):
@@ -261,7 +294,10 @@ def predict_disease(model, image):
 
 # ==================== RISK PREDICTION ====================
 
-def engineer_risk_features(temp, humidity, rainfall, wind_speed, cloud_cover):
+def engineer_risk_features(
+    temp, humidity, rainfall, wind_speed, cloud_cover,
+    ndvi=0.6, ndwi=0.0, evi=0.65, savi=0.57
+):
     """Create features for risk prediction"""
     current_date = datetime.now()
 
@@ -272,6 +308,12 @@ def engineer_risk_features(temp, humidity, rainfall, wind_speed, cloud_cover):
         'rainfall': rainfall,
         'wind_speed': wind_speed,
         'cloud_cover': cloud_cover,
+
+        # Latest vegetation indices from the satellite feature table
+        'ndvi': ndvi,
+        'ndwi': ndwi,
+        'evi': evi,
+        'savi': savi,
 
         # Temporal
         'month': current_date.month,
@@ -370,8 +412,8 @@ def render_sidebar():
         st.markdown("- AUC: **97.69%**")
 
         st.markdown("**Prediksi Risiko:**")
-        st.markdown("- Accuracy: **98.37%**")
-        st.markdown("- F1-Score: **98.37%**")
+        st.markdown("- Accuracy: **98.22%**")
+        st.markdown("- F1-Score: **98.22%**")
 
         st.markdown("---")
 
@@ -404,7 +446,7 @@ def page_home():
         st.markdown("""
         <div class="metric-card">
             <h3>📊 Prediksi Risiko</h3>
-            <p>Forecast risiko 7 hari ke depan berbasis data cuaca</p>
+            <p>Forecast risiko 7 hari berbasis cuaca dan indeks vegetasi</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -441,14 +483,15 @@ def page_home():
 
     with tab2:
         st.markdown("""
-        ### 📈 Prediksi Risiko Berbasis Cuaca
+        ### 📈 Prediksi Risiko Multimodal
 
-        Sistem menganalisis data cuaca untuk memprediksi risiko serangan penyakit:
+        Sistem menganalisis data cuaca dan indeks vegetasi untuk memprediksi risiko serangan penyakit:
 
         - Kelembapan tanah & udara
         - Suhu rata-rata
         - Curah hujan
         - Kecepatan angin
+        - NDVI, NDWI, EVI, dan SAVI
 
         Hasil: **Rendah**, **Sedang**, atau **Tinggi** dengan rekomendasi tindakan.
         """)
@@ -600,10 +643,11 @@ def page_disease_detection():
 def page_risk_prediction():
     """Render risk prediction page"""
     st.markdown("## 📊 Prediksi Risiko Penyakit")
-    st.markdown("Analisis risiko serangan penyakit berdasarkan kondisi cuaca")
+    st.markdown("Analisis risiko serangan penyakit berdasarkan kondisi cuaca dan indeks vegetasi")
 
     # Load model
     risk_model, scaler, features, config = load_risk_model()
+    satellite_features = load_latest_satellite_features()
 
     if risk_model is None:
         st.error("❌ Model tidak tersedia. Silakan training model terlebih dahulu.")
@@ -652,16 +696,59 @@ def page_risk_prediction():
                 help="Persentase tutupan awan"
             )
 
+            st.markdown("#### Indeks Vegetasi")
+            st.caption(
+                "Nilai default diambil dari data satelit terbaru"
+                + (f" ({satellite_features['satellite_date']})." if satellite_features['satellite_date'] else ".")
+            )
+
+            col_c, col_d = st.columns(2)
+            with col_c:
+                ndvi = st.slider(
+                    "NDVI",
+                    min_value=-1.0, max_value=1.0,
+                    value=float(satellite_features['ndvi']),
+                    step=0.01,
+                    help="Indeks kesehatan vegetasi. Nilai lebih rendah mengindikasikan stres vegetasi."
+                )
+                evi = st.slider(
+                    "EVI",
+                    min_value=-1.0, max_value=1.0,
+                    value=float(satellite_features['evi']),
+                    step=0.01,
+                    help="Indeks vegetasi yang lebih sensitif pada area dengan biomassa tinggi."
+                )
+
+            with col_d:
+                ndwi = st.slider(
+                    "NDWI",
+                    min_value=-1.0, max_value=1.0,
+                    value=float(satellite_features['ndwi']),
+                    step=0.01,
+                    help="Indeks kondisi air tanaman atau lahan."
+                )
+                savi = st.slider(
+                    "SAVI",
+                    min_value=-1.0, max_value=1.0,
+                    value=float(satellite_features['savi']),
+                    step=0.01,
+                    help="Indeks vegetasi yang dikoreksi terhadap pengaruh tanah."
+                )
+
             submitted = st.form_submit_button("🔮 Prediksi Risiko", type="primary")
 
             if submitted:
-                with st.spinner("Menganalisis data cuaca..."):
+                with st.spinner("Menganalisis data cuaca dan vegetasi..."):
                     weather_data = {
                         'temp': temp,
                         'humidity': humidity,
                         'rainfall': rainfall,
                         'wind_speed': wind_speed,
-                        'cloud_cover': cloud_cover
+                        'cloud_cover': cloud_cover,
+                        'ndvi': ndvi,
+                        'ndwi': ndwi,
+                        'evi': evi,
+                        'savi': savi
                     }
 
                     risk_level, risk_features = predict_risk(
@@ -696,6 +783,13 @@ def page_risk_prediction():
                     st.metric("Curah Hujan", f"{rainfall} mm", "Basah" if rainfall > 10 else "Normal")
                     st.metric("Favorable untuk Blast", "Ya" if risk_features['blast_favorable'] else "Tidak")
 
+                st.markdown("### 🛰️ Indeks Vegetasi")
+                sat_col1, sat_col2, sat_col3, sat_col4 = st.columns(4)
+                sat_col1.metric("NDVI", f"{risk_features['ndvi']:.2f}", "Stress" if risk_features['ndvi'] < 0.4 else "Normal")
+                sat_col2.metric("NDWI", f"{risk_features['ndwi']:.2f}")
+                sat_col3.metric("EVI", f"{risk_features['evi']:.2f}")
+                sat_col4.metric("SAVI", f"{risk_features['savi']:.2f}")
+
                 # Disease risk breakdown
                 st.markdown("---")
                 st.markdown("### 🦠 Risiko per Penyakit")
@@ -727,6 +821,7 @@ def page_risk_prediction():
         - Curah hujan
         - Kecepatan angin
         - Tutupan awan
+        - Indeks vegetasi NDVI, NDWI, EVI, SAVI
 
         **Interpretasi Hasil:**
         - **Low (Rendah)**: Kondisi tidak mendukung perkembangan penyakit
@@ -780,9 +875,9 @@ def page_about():
 
     **Risk Prediction Model**
     - Algoritma: XGBoost (Gradient Boosting)
-    - Features: 37 fitur cuaca
-    - Accuracy: 98.37%
-    - F1-Score: 98.37%
+    - Features: 41 fitur cuaca, temporal, dan indeks vegetasi
+    - Accuracy: 98.22%
+    - F1-Score: 98.22%
 
     ### 🏆 Kompetisi
 
@@ -827,10 +922,10 @@ def page_about():
 
     with col2:
         st.markdown("### 📈 Risk Prediction")
-        st.metric("Accuracy", "98.37%", "")
-        st.metric("Precision", "98.37%", "")
-        st.metric("Recall", "98.37%", "")
-        st.metric("F1-Score", "98.37%", "")
+        st.metric("Accuracy", "98.22%", "")
+        st.metric("Precision", "98.23%", "")
+        st.metric("Recall", "98.22%", "")
+        st.metric("F1-Score", "98.22%", "")
 
 
 # ==================== MAIN APP ====================
