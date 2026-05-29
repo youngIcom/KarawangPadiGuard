@@ -1,194 +1,220 @@
 # KarawangPadiGuard
 
-> Sistem Deteksi Dini & Peringatan Penyakit Padi Berbasis AI untuk Kabupaten Karawang
-> **Microsoft Elevate Training Center - AI Impact Challenge 2026**
+KarawangPadiGuard adalah prototipe sistem deteksi dini dan prediksi risiko penyakit padi berbasis AI untuk mendukung ketahanan pangan di Kabupaten Karawang.
 
-[![Streamlit App](https://img.shields.io/badge/Streamlit-Demo-blue?logo=streamlit)](https://huggingface.co/spaces/yesayasentosa/karawangpadiguard)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
+Proyek ini dikembangkan untuk Microsoft Elevate Training Center - AI Impact Challenge 2026 dengan fokus pada integrasi Computer Vision, risk scoring berbasis cuaca, indeks vegetasi, dan analisis Value at Risk.
 
-## 🌾 Tentang Proyek
+## Ringkasan
 
-KarawangPadiGuard adalah solusi AI yang mengintegrasikan **Computer Vision** dan **Machine Learning** untuk:
+Penyakit padi seperti Leaf Blast, Brown Spot, dan Bacterial Leaf Blight dapat menyebabkan kehilangan hasil panen yang signifikan. Di wilayah lumbung pangan seperti Karawang, keterlambatan diagnosis dan minimnya prioritas mitigasi berbasis data dapat berdampak langsung pada ketahanan pangan daerah.
 
-1. **Deteksi Penyakit** - Identifikasi 6 jenis penyakit padi dari foto tanaman (< 5 detik)
-2. **Prediksi Risiko** - Forecast risiko 7 hari ke depan berbasis data cuaca
-3. **Peringatan Dini** - Alert otomatis untuk petani dan penyuluh
+KarawangPadiGuard menjawab masalah tersebut melalui dua kemampuan utama:
 
-### 🎯 Problem Statement
+1. Diagnosis penyakit padi dari foto daun menggunakan model Computer Vision.
+2. Prediksi status risiko penyakit menggunakan model XGBoost berbasis cuaca, fitur temporal, indikator penyakit, dan indeks vegetasi.
 
-Indonesia menghadapi kehilangan hasil panen **20-40%** akibat serangan hama dan penyakit padi. Di Karawang (lumbung pangan nasional), rasio penyuluh pertanian adalah **1:1.400 ha**, membuat deteksi penyakit sering terlambat.
+Pada tahap ini, aplikasi Streamlit dijalankan secara lokal. Training Computer Vision dilakukan di Google Colab, sedangkan Microsoft Azure digunakan sebagai fondasi MLOps ringan untuk eksperimen, model registry, dan artifact tracking.
 
-**Solusi:** Transformasi proses identifikasi dari 3-7 hari menjadi < 5 detik dengan pendekatan preventif melalui prediksi risiko.
+## Fitur Utama
 
-## 🤖 Model Performance
+- Deteksi penyakit padi dari foto daun.
+- Klasifikasi 6 kelas: Bacterial Leaf Blight, Brown Spot, Healthy Rice Leaf, Leaf Blast, Leaf Scald, dan Sheath Blight.
+- Prediksi risiko penyakit padi dengan status Low, Medium, atau High.
+- Integrasi fitur cuaca, lag variables, rolling averages, indikator penyakit, serta indeks vegetasi NDVI, NDWI, EVI, dan SAVI.
+- Analisis Golden Window berdasarkan pola kelembapan rolling 7 hari.
+- Analisis Value at Risk untuk menentukan kecamatan prioritas intervensi.
+- Setup Azure ML untuk eksperimen risk model dan model registry.
 
-### Computer Vision (Disease Detection)
+## Model Performance
 
-| Metrik | Nilai |
-|--------|-------|
-| Model | MobileNetV3Small (Transfer Learning) |
-| Accuracy | **83.55%** |
-| Precision | **87.22%** |
-| Recall | **80.16%** |
-| AUC | **97.69%** |
-| F1-Score | **83.54%** |
+### Computer Vision Model
 
-**Dataset:** 3.829 gambar, 6 kelas (Rice Disease Dataset)
+| Item | Nilai |
+| --- | --- |
+| Arsitektur | MobileNetV3Small Transfer Learning |
+| Dataset | 3.829 gambar, 6 kelas |
+| Accuracy | 83,55% |
+| Precision | 87,22% |
+| Recall | 80,16% |
+| F1-score | 83,54% |
+| AUC | 97,69% |
 
-### Risk Prediction (Tabular)
+Dataset gambar menggunakan Rice Disease Dataset dari Kaggle dengan lisensi terbuka CC-BY 4.0.
 
-| Metrik | Nilai |
-|--------|-------|
-| Model | XGBoost (Gradient Boosting) |
-| Accuracy | **98.22%** |
-| Precision | **98.23%** |
-| Recall | **98.22%** |
-| F1-Score | **98.22%** |
+### Risk Prediction Model
 
-**Features:** 41 fitur cuaca, temporal, indikator penyakit, dan indeks vegetasi
+| Item | Nilai |
+| --- | --- |
+| Algoritma | XGBoost |
+| Feature set | 41 fitur cuaca, temporal, indikator penyakit, dan indeks vegetasi |
+| Accuracy | 98,22% |
+| Precision | 98,23% |
+| Recall | 98,22% |
+| F1-score | 98,22% |
 
-## 📊 Kelas Penyakit yang Dideteksi
+Catatan: model risk prediction pada tahap ini adalah validasi prototipe risk scoring berbasis data cuaca dan fitur lingkungan. Label risiko dibangun dari aturan kondisi penyakit, sehingga klaim performa tidak boleh dibaca sebagai validasi wabah lapangan produksi.
 
-| Penyakit | Pathogen | Yield Loss |
-|----------|----------|------------|
-| Hawar Daun Bakteri | Xanthomonas oryzae | 30-50% |
-| Bercak Coklat | Cochliobolus miyabeanus | 10-25% |
-| Blas Daun | Pyricularia oryzae | 20-40% |
-| Hawar Seludang | Monographella albescens | 15-30% |
-| Blas Seludang | Rhizoctonia solani | 20-25% |
-| Daun Sehat | - | 0% |
+## Dataset dan Insight
 
-## 🛠️ Teknologi
+Dataset yang digunakan dalam prototipe:
 
-- **ML/DL**: TensorFlow, XGBoost, scikit-learn
-- **Frontend**: Streamlit
-- **Cloud**: Microsoft Azure (ML, Communication Services)
-- **Deployment**: HuggingFace Spaces
-- **MLOps**: Weights & Biases
+- Data cuaca harian yang telah diproses menjadi 3.388 record.
+- Data produksi padi Karawang 2021 untuk 174 desa.
+- Dataset gambar penyakit padi dari Kaggle.
+- Tabel indeks vegetasi prototype berisi NDVI, NDWI, EVI, dan SAVI.
 
-## 📁 Struktur Project
+Insight utama:
 
-```
+- `humidity_rolling_7` menjadi salah satu fitur paling berpengaruh pada model risiko.
+- Kelembapan rata-rata 7 hari di atas 85% digunakan sebagai sinyal awal Golden Window 48-72 jam untuk intervensi preventif.
+- Total aset produksi padi Karawang 2021 diperkirakan Rp 3,11 triliun.
+- Potensi kerugian 20-40% setara Rp 622,5 miliar hingga Rp 1,25 triliun.
+- Jika intervensi dini menekan 5-10% risiko, nilai ekonomi yang berpotensi dijaga mencapai Rp 155,6-311,3 miliar.
+- Kecamatan prioritas awal berdasarkan Value at Risk: Tegalwaru, Tirtajaya, Pedes, Tirtamulya, dan Cilamaya Kulon.
+
+## Microsoft Azure
+
+Azure digunakan sebagai lapisan MLOps ringan, bukan sebagai hosting utama aplikasi pada tahap prototipe.
+
+Layanan Azure yang digunakan:
+
+- Azure Machine Learning Workspace untuk eksperimen dan lifecycle model.
+- Azure ML Model Registry untuk versioning model XGBoost dan MobileNetV3.
+- Default workspace storage untuk artifact eksperimen dan registry.
+- Azure ML Compute CPU opsional untuk menjalankan job risk model skala kecil.
+
+Layanan yang belum digunakan sebagai fitur berjalan:
+
+- Azure App Service atau Container Apps untuk hosting permanen.
+- Azure GPU Compute.
+- Managed Online Endpoint.
+- Azure Functions.
+- Azure Communication Services.
+
+Azure Functions dan Azure Communication Services masuk roadmap untuk otomasi data harian dan peringatan SMS/WhatsApp pada tahap produksi.
+
+## Struktur Project
+
+```text
 KarawangPadiGuard/
-├── data/
-│   ├── processed/        # Data yang sudah dibersihkan
-│   ├── raw/              # Data mentah
-│   ├── satellite/        # Data citra satelit (roadmap)
-│   └── weather/          # Data cuaca BMKG
-├── models/              # Model yang sudah dilatih
-│   ├── mobilenetv3_rice_disease_v1_best.keras
-│   ├── xgboost_risk_prediction_v1.pkl
-│   └── ...
-├── notebooks/            # Jupyter notebooks untuk EDA
+├── app.py                         # Aplikasi Streamlit lokal
+├── azure/                         # Konfigurasi Azure ML
+├── data/                          # Struktur data lokal dan processed placeholders
+├── models/                        # Placeholder dan metadata model ringan
+├── notebooks/                     # Notebook EDA dan training Colab
 ├── src/
-│   ├── data/            # Script pengumpulan data
-│   ├── models/          # Script training model
-│   └── api/             # API endpoints (roadmap)
-├── app.py               # Streamlit demo app
-├── Dockerfile           # Untuk deployment
-├── requirements_app.txt # Dependencies untuk app
-└── README.md            # File ini
+│   ├── analysis/                  # Analisis strategis dan Value at Risk
+│   ├── data/                      # Script pengumpulan data
+│   └── models/                    # Script training model
+├── requirements.txt               # Dependency aplikasi/proyek
+├── requirements_azure.txt         # Dependency setup Azure
+├── risk-training-job.yml          # Job Azure ML dari root project
+├── setup_azure_resources.py       # Helper setup Azure ML
+└── README.md
 ```
 
-## 🚀 Quick Start
+File besar seperti model `.keras`, `.pkl`, MLflow runs, PDF, virtual environment, dan draft dokumentasi tidak dimasukkan ke GitHub.
 
-### Setup Environment
+## Menjalankan Aplikasi Lokal
+
+Install dependency:
 
 ```bash
-# Clone repository
-git clone https://github.com/yesayasentosa/KarawangPadiGuard.git
-cd KarawangPadiGuard
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements_app.txt
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### Run Demo App
+Jalankan Streamlit:
 
 ```bash
-# Run Streamlit app
 streamlit run app.py
 ```
 
-Aplikasi akan terbuka di `http://localhost:8501`
+Akses dari browser lokal:
 
-### Training Models
-
-```bash
-# Train Computer Vision model
-Jalankan file train-cv-model.ipynb
-
-# Train Risk Prediction model
-Jalankan file train-risk-model.ipynb
+```text
+http://localhost:8501
 ```
 
-## 📱 Fitur Demo App
+Jika ingin membuka dari HP pada jaringan Wi-Fi yang sama:
 
-1. **Deteksi Penyakit**
-   - Upload foto daun padi
-   - Deteksi otomatis 6 kelas penyakit
-   - Tampilkan confidence score
-   - Saran penanganan untuk setiap penyakit
+```bash
+streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+```
 
-2. **Prediksi Risiko**
-   - Input data cuaca harian
-   - Prediksi risiko (Low/Medium/High)
-   - Analisis faktor kunci
-   - Rekomendasi tindakan
+Lalu buka dari HP:
 
-3. **Dashboard**
-   - Model performance metrics
-   - Informasi proyek
-   - Dokumentasi teknis
+```text
+http://IP_LAPTOP:8501
+```
 
-## 📈 Dampak Potensial
+## Notebook
 
-| Metric | Nilai |
-|--------|-------|
-| Area Studi | 70.000 ha (Kabupaten Karawang) |
-| Data Produksi | 518.785 ton (2021, 174 desa) |
-| Nilai Ekonomi | Rp 3,1 Triliun |
-| Potensi Penghematan | Rp 155-311 Miliar/tahun (efisiensi 5-10%) |
+Notebook utama:
 
-## 🏆 Kompetisi
+- `notebooks/01_eda_karawangpadi_guard.ipynb`: EDA data cuaca, produksi, indeks vegetasi, dan dataset gambar.
+- `notebooks/03_train_risk_model_colab.ipynb`: training risk model XGBoost di Google Colab.
+- `notebooks/04_train_cv_model_colab.ipynb`: training Computer Vision MobileNetV3Small di Google Colab.
 
-**Microsoft Elevate Training Center - AI Impact Challenge 2026**
+## Azure ML Quick Reference
 
-- **Tema**: Ketahanan Pangan & Agrikultur Modern
-- **Problem**: Bagaimana integrasi data satelit, citra digital, dan multimodal ML dapat menciptakan sistem peringatan dini untuk mengurangi kehilangan hasil panen?
-- **Status**: Submission Final
+Buat workspace dan register model jika artifact model tersedia lokal:
 
-## 📦 Deliverables
+```bash
+az login
+az extension add -n ml -y
+az extension update -n ml
 
-| Item | Link |
-|------|------|
-| **GitHub Repository** | [https://github.com/youngIcom/KarawangPadiGuard.git](https://github.com/youngIcom/KarawangPadiGuard.git) |
-| **Project Brief** | Lihat file `PROJECT_BRIEF_FINAL.txt` |
-| **Video Demo** | [Upload Soon] |
+export AZURE_RESOURCE_GROUP=KarawangPadiGuard_RG
+export AZURE_LOCATION=southeastasia
+export AZURE_ML_WORKSPACE=karawangpadiguard-ml
 
-## 👥 Tim
+az group create --name "$AZURE_RESOURCE_GROUP" --location "$AZURE_LOCATION"
+az ml workspace create --resource-group "$AZURE_RESOURCE_GROUP" --file azure/workspace.yml
+```
 
-**Yesaya Situmorang**
-- Role: Machine Learning Engineer & Fullstack Developer
-- Email: yesayasentosa@gmail.com
-- Program: Microsoft Elevate Training Center
+Jalankan job risk model opsional:
 
-## 📚 Referensi
+```bash
+az ml compute create \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --workspace-name "$AZURE_ML_WORKSPACE" \
+  --file azure/cpu-cluster.yml
 
-- [Rice Disease Dataset (Kaggle)](https://www.kaggle.com/datasets/anshulm257/rice-disease-dataset)
-- [MobileNetV3 Paper](https://arxiv.org/abs/1905.02244)
-- [XGBoost Documentation](https://xgboost.readthedocs.io/)
-- [Sentinel-2 Data (Copernicus)](https://scihub.copernicus.eu/)
+az ml job create \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --workspace-name "$AZURE_ML_WORKSPACE" \
+  --file risk-training-job.yml \
+  --stream
+```
 
-## 📄 Lisensi
+Setelah selesai, hapus compute agar biaya tidak berjalan:
 
-© 2026 Yesaya Situmorang - Microsoft Elevate Training Center
+```bash
+az ml compute delete \
+  --resource-group "$AZURE_RESOURCE_GROUP" \
+  --workspace-name "$AZURE_ML_WORKSPACE" \
+  --name cpu-cluster \
+  --yes
+```
 
----
+## Roadmap
 
-**Dibuat dengan ❤️ untuk petani Indonesia**
+- Integrasi Sentinel-2 aktual untuk menggantikan tabel indeks vegetasi prototype.
+- Otomatisasi pipeline data cuaca dan satelit menggunakan Azure Functions.
+- Integrasi peringatan SMS/WhatsApp menggunakan Azure Communication Services.
+- Penyempurnaan dashboard untuk penyuluh dan Dinas Pertanian.
+- Continuous learning loop dari feedback foto petani dan penyuluh.
+
+## Referensi
+
+- Rice Disease Dataset: https://www.kaggle.com/datasets/anshulm257/rice-disease-dataset
+- MobileNetV3: https://arxiv.org/abs/1905.02244
+- XGBoost: https://xgboost.readthedocs.io/
+- Azure Machine Learning: https://learn.microsoft.com/azure/machine-learning/
+
+## Author
+
+Yesaya Situmorang  
+Microsoft Elevate Training Center - AI Impact Challenge 2026
